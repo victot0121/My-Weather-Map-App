@@ -32,3 +32,21 @@ export interface WeatherForecast {
   daily: DailyWeather[];
   timezone_offset: number; 
 }
+
+// NEW: Enum for different POI types
+export enum PoiType {
+    Hotel = 'hotel',
+    Church = 'church',
+    Mosque = 'mosque',
+    Food = 'food',
+}
+
+// NEW: Interface for a Point of Interest
+export interface PointOfInterest {
+    id: string;
+    name: string;
+    latitude: number;
+    longitude: number;
+    type: PoiType; 
+    description?: string; 
+}

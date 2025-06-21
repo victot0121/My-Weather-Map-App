@@ -1,11 +1,19 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import ReactDOMServer from 'react-dom/server'; 
+import ReactDOMServer from 'react-dom/server';
 
+// NEW: Import react-icons
+import { FaInfoCircle, FaHotel, FaChurch, FaMosque, FaUtensils } from 'react-icons/fa';
+// You can explore other icon sets from react-icons (e.g., Io5 for Ionicons, Md for Material Design)
+// import { IoRestaurantSharp } from 'react-icons/io5';
+// import { MdHotel } from 'react-icons/md';
+
+
+// Fix for default marker icon issue in Leaflet with Webpack/Next.js
 delete (L.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
@@ -13,88 +21,157 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
 });
 
-import { City, WeatherForecast } from '../lib/types';
+import { City, WeatherForecast, PointOfInterest, PoiType } from '../lib/types';
 import WeatherPopup from './WeatherPopup';
 import { fetchWeatherForecast } from '../lib/weatherApi';
-import InfoIcon from './icons/InfoIcon'; 
+import { POIS } from '../lib/constants';
 
 interface MapProps {
   selectedCity: City | null;
 }
 
-
+// Updated createReactDivIcon to be more flexible with icon components
 const createReactDivIcon = (
-  Component: React.ElementType,
-  componentProps: React.SVGProps<SVGSVGElement>, // Props to pass to your React SVG component
+  IconComponent: React.ElementType, // Now directly takes the React icon component (e.g., FaInfoCircle)
+  iconProps: { size?: number; className?: string }, // Props for the icon component itself
   divIconOptions?: L.DivIconOptions // Options for the Leaflet L.divIcon
 ) => {
-  // Render the React component to an HTML string
-  const iconHtml = ReactDOMServer.renderToString(<Component {...componentProps} />);
+  // `react-icons` components will inherit `currentColor` by default from the parent div.
+  // We pass `size` directly to the `react-icon` component.
+  const iconHtml = ReactDOMServer.renderToString(
+    <IconComponent size={iconProps.size} className={iconProps.className} />
+  );
 
   return L.divIcon({
     html: iconHtml,
-    className: divIconOptions?.className || 'custom-marker-icon', // Default class name for the div
-    iconSize: divIconOptions?.iconSize || [50, 50],
+    // The className for the divIcon's wrapper div. Use this for setting color via Tailwind.
+    className: divIconOptions?.className || 'custom-marker-icon flex items-center justify-center',
+    iconSize: divIconOptions?.iconSize || [30, 30],
     iconAnchor: divIconOptions?.iconAnchor || [15, 30],
     popupAnchor: divIconOptions?.popupAnchor || [0, -25],
   });
 };
 
+// Function to get the correct icon based on POI type
+const getPoiLeafletIcon = (poiType: PoiType) => {
+  let IconComponent: React.ElementType;
+  let iconBaseSize = 28; // Base size for react-icons
+  let divIconSize: [number, number] = [40, 40]; // Size of the divIcon container
+  let colorClass = '';
+
+  switch (poiType) {
+    case PoiType.Hotel:
+      IconComponent = FaHotel;
+      colorClass = 'text-yellow-600';
+      break;
+    case PoiType.Church:
+      IconComponent = FaChurch;
+      colorClass = 'text-purple-600';
+      break;
+    case PoiType.Mosque:
+      IconComponent = FaMosque;
+      colorClass = 'text-green-600';
+      break;
+    case PoiType.Food:
+      IconComponent = FaUtensils; // Using FaUtensils for food/restaurant
+      colorClass = 'text-red-600';
+      break;
+    default:
+      IconComponent = FaInfoCircle; // Fallback
+      colorClass = 'text-gray-500';
+  }
+
+  return createReactDivIcon(
+    IconComponent,
+    { size: iconBaseSize }, // Props for the react-icon component
+    {
+      className: `custom-poi-marker custom-poi-marker-${poiType} ${colorClass} rounded-full bg-white bg-opacity-80 shadow-md flex items-center justify-center`, // Added background for better visibility
+      iconSize: divIconSize,
+      iconAnchor: [divIconSize[0] / 2, divIconSize[1]],
+      popupAnchor: [0, -divIconSize[1] / 2 + 5] // Adjusted popup anchor
+    }
+  );
+};
+
 
 const Map: React.FC<MapProps> = ({ selectedCity }) => {
   const [mapCenter, setMapCenter] = useState<[number, number]>(
-    selectedCity ? [selectedCity.latitude, selectedCity.longitude] : [9.0820, 8.6753] // Centered on Nigeria if no city selected
+    selectedCity ? [selectedCity.latitude, selectedCity.longitude] : [9.0820, 8.6753]
   );
-  const [mapZoom, setMapZoom] = useState<number>(selectedCity ? 10 : 6); // Adjust default zoom for wider view
+  const [mapZoom, setMapZoom] = useState<number>(selectedCity ? 10 : 6);
 
   const [weatherData, setWeatherData] = useState<WeatherForecast | null>(null);
-  const [activeCityPopup, setActiveCityPopup] = useState<City | null>(null); // This state controls which popup is open
+  const [activeCityPopup, setActiveCityPopup] = useState<City | PointOfInterest | null>(null); // Allow active popup to be City or POI
   const [isLoadingWeather, setIsLoadingWeather] = useState(false);
 
-  // Effect to update map center and zoom when selectedCity changes
+  const markerRef = useRef<L.Marker | null>(null); // For selectedCity's marker
+
   useEffect(() => {
     if (selectedCity) {
       setMapCenter([selectedCity.latitude, selectedCity.longitude]);
       setMapZoom(10);
-      setActiveCityPopup(null); // Close any open popup when a new city is selected from sidebar
+      setActiveCityPopup(null); // Close any open popup
       setWeatherData(null);
+      setTimeout(() => {
+        if (markerRef.current) {
+          markerRef.current.openPopup();
+          setActiveCityPopup(selectedCity);
+        }
+      }, 100);
     }
   }, [selectedCity]);
 
- 
+  // Info icon for selected city
   const infoLeafletIcon = React.useMemo(() => createReactDivIcon(
-    InfoIcon,
-    { className: 'text-primaryBlue drop-shadow-md w-full h-full' }, // Props for the SVG element. `w-full h-full` helps it fill the parent div.
+    FaInfoCircle, // Using FaInfoCircle from react-icons
+    { size: 32 }, // Size for the react-icon
     {
-      className: 'custom-info-marker', // Class for the divIcon's outer div
-      iconSize: [36, 36], // Size of the DIV wrapper
-      iconAnchor: [18, 36], // Anchor point relative to iconSize [half_width, full_height]
-      popupAnchor: [0, -30] // Position of the popup relative to the iconAnchor
+      className: 'custom-info-marker text-primaryBlue rounded-full bg-white bg-opacity-80 shadow-lg flex items-center justify-center', // Added background for better visibility
+      iconSize: [44, 44], // Size of the divIcon container
+      iconAnchor: [22, 44],
+      popupAnchor: [0, -40]
     }
-  ), []); 
-  const handleMarkerClick = useCallback(async (city: City) => {
-    // If the clicked city is already active, close the popup
+  ), []);
+
+  const handleCityMarkerClick = useCallback(async (city: City) => {
     if (activeCityPopup?.id === city.id) {
+      if (markerRef.current) {
+        markerRef.current.closePopup();
+      }
       setActiveCityPopup(null);
       setWeatherData(null);
       return;
     }
 
-    // Set the clicked city as active and fetch weather
     setActiveCityPopup(city);
     setIsLoadingWeather(true);
-    setWeatherData(null); // Clear previous weather data
+    setWeatherData(null);
 
     try {
       const forecast = await fetchWeatherForecast(city.latitude, city.longitude);
       setWeatherData(forecast);
     } catch (error) {
       console.error('Error fetching weather:', error);
-      setWeatherData(null); // Set to null on error to indicate failure
+      setWeatherData(null);
     } finally {
       setIsLoadingWeather(false);
     }
-  }, [activeCityPopup]); // Re-create if activeCityPopup changes
+  }, [activeCityPopup]);
+
+  const handlePoiMarkerClick = useCallback((poi: PointOfInterest) => {
+    if (activeCityPopup?.id === poi.id) {
+      setActiveCityPopup(null);
+      return;
+    }
+    setActiveCityPopup(poi); // Now activeCityPopup can truly be a PointOfInterest
+    setWeatherData(null);
+  }, [activeCityPopup]);
+
+  const handlePopupClose = useCallback(() => {
+    setActiveCityPopup(null);
+    setWeatherData(null);
+  }, []);
+
 
   return (
     <MapContainer
@@ -109,36 +186,55 @@ const Map: React.FC<MapProps> = ({ selectedCity }) => {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
+      {/* Marker for the currently selected city (from sidebar) */}
       {selectedCity && (
         <Marker
           position={[selectedCity.latitude, selectedCity.longitude]}
-          icon={infoLeafletIcon} // Using the custom InfoIcon
+          icon={infoLeafletIcon}
+          ref={markerRef}
           eventHandlers={{
-            click: () => handleMarkerClick(selectedCity),
+            click: () => handleCityMarkerClick(selectedCity),
+            popupclose: handlePopupClose,
           }}
         >
-          <Popup
-            position={[selectedCity.latitude, selectedCity.longitude]}
-            eventHandlers={{
-              remove: () => {
-                setActiveCityPopup(null); 
-                setWeatherData(null);
-              }
-            }}
-          >
-            {/* Conditional rendering for WeatherPopup inside the Leaflet Popup */}
-            {activeCityPopup?.id === selectedCity.id && (
+          <Popup position={[selectedCity.latitude, selectedCity.longitude]}>
+            {/* Type guard to check if activeCityPopup is a City */}
+            {activeCityPopup && 'name' in activeCityPopup && (activeCityPopup as City).id === selectedCity.id && (
               isLoadingWeather ? (
                 <div className="p-4 text-center">Loading weather...</div>
               ) : weatherData ? (
                 <WeatherPopup forecast={weatherData} cityName={activeCityPopup.name} />
               ) : (
-                <div className="p-4 text-center">Failed to load weather. Please try again.</div>
+                <div className="p-4 text-center">Failed to load weather.</div>
               )
             )}
           </Popup>
         </Marker>
       )}
+
+      {/* Markers for Points of Interest (POIs) */}
+      {POIS.map(poi => (
+        <Marker
+          key={poi.id}
+          position={[poi.latitude, poi.longitude]}
+          icon={getPoiLeafletIcon(poi.type)}
+          eventHandlers={{
+            click: () => handlePoiMarkerClick(poi),
+            popupclose: handlePopupClose,
+          }}
+        >
+          <Popup position={[poi.latitude, poi.longitude]}>
+            {/* Type guard to check if activeCityPopup is a PointOfInterest */}
+            {activeCityPopup && 'type' in activeCityPopup && (activeCityPopup as PointOfInterest).id === poi.id && (
+              <div className="p-3 text-gray-800">
+                <h4 className="font-bold text-lg mb-1">{poi.name}</h4>
+                <p className="text-sm text-gray-600 capitalize mb-2">Type: {poi.type}</p>
+                {poi.description && <p className="text-sm">{poi.description}</p>}
+              </div>
+            )}
+          </Popup>
+        </Marker>
+      ))}
     </MapContainer>
   );
 };
