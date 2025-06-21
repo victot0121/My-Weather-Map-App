@@ -55,8 +55,8 @@ const createReactDivIcon = (
 // Function to get the correct icon based on POI type
 const getPoiLeafletIcon = (poiType: PoiType) => {
   let IconComponent: React.ElementType;
-  let iconBaseSize = 28; // Base size for react-icons
-  let divIconSize: [number, number] = [40, 40]; // Size of the divIcon container
+  const iconBaseSize = 28; // Base size for react-icons
+  const divIconSize: [number, number] = [40, 40]; // Size of the divIcon container
   let colorClass = '';
 
   switch (poiType) {
