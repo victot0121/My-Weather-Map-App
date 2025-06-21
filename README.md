@@ -57,5 +57,5 @@ Follow these steps to get the project up and running on your local machine.
 ### Cloning the Repository
 
 ```bash
-git clone [https://github.com/victot0121/My-Weather-Map-App.git](https://github.com/victot0121/My-Weather-Map-App.git)
+git clone https://github.com/victot0121/My-Weather-Map-App.git
 cd My-Weather-Map-App
