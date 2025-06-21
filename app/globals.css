@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+
+/* Basic reset/base styles not fully covered by Tailwind preflight */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: sans-serif;
+
+  overflow: hidden;
+}
+
+#__next {
+  height: 100%;
+}
+
+
+.leaflet-popup-content-wrapper {
+  padding: 0 !important; /* Remove default popup padding */
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+  background: white !important;
+  border: none !important;
+  font-family: inherit !important; /* Use consistent font */
+  overflow: hidden !important; /* Ensure content stays within border-radius */
+}
+
+.leaflet-popup-tip {
+  background: white !important; /* Match popup background color */
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important; /* Apply shadow to tip */
+  margin-top: -1px; /* Adjust to connect seamlessly */
+}
+
+.leaflet-popup-close-button {
+  display: none !important; /* Hide default close button */
+}
