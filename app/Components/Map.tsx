@@ -34,7 +34,7 @@ const createReactDivIcon = (
   return L.divIcon({
     html: iconHtml,
     className: divIconOptions?.className || 'custom-marker-icon', // Default class name for the div
-    iconSize: divIconOptions?.iconSize || [30, 30],
+    iconSize: divIconOptions?.iconSize || [50, 50],
     iconAnchor: divIconOptions?.iconAnchor || [15, 30],
     popupAnchor: divIconOptions?.popupAnchor || [0, -25],
   });
@@ -119,9 +119,11 @@ const Map: React.FC<MapProps> = ({ selectedCity }) => {
         >
           <Popup
             position={[selectedCity.latitude, selectedCity.longitude]}
-            onClose={() => {
-              setActiveCityPopup(null); // Crucial for closing the popup
-              setWeatherData(null);
+            eventHandlers={{
+              remove: () => {
+                setActiveCityPopup(null); 
+                setWeatherData(null);
+              }
             }}
           >
             {/* Conditional rendering for WeatherPopup inside the Leaflet Popup */}
